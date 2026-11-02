@@ -23,7 +23,7 @@ Because pushing directly the fullclient on a server/ftp can provoke some errors,
 
 ### Prerequisites
 
-- **Web Server**: Apache (`mod_rewrite`, `mod_headers`) or Nginx (`ngx_http_core`, `ngx_http_fastcgi`, `ngx_http_headers`)
+- **Web Server**: Apache (`mod_rewrite`, `mod_headers`, `mod_authz_core`) with the mandatory policy below. Other servers require an independently configured equivalent policy.
 - **PHP**: 7.4+ (64-bit x64 recommended; **mandatory for GRFs > 2GB**)
 - **PHP Extensions**: `zlib`, `mbstring` (required); `gd` (with TrueColor), `iconv` (recommended)
 
@@ -43,7 +43,7 @@ php doctor.php --deep       # Deep validation with encoding analysis
 
 ### 3. Start the server
 
-Using Docker or your preferred web server (Apache, Nginx).
+Use the supplied secured Apache Docker profile or configure the mandatory Apache policy below. Other web servers require an equivalent policy.
 
 ---
 ## Wiki
@@ -406,7 +406,7 @@ you have to modify the respective [Apache Dockerfile](docker/apache/Dockerfile) 
 and re-run the docker compose command.
 
 You can also override vhost configuration on **/etc/apache2/sites-available/000-default.conf** for Apache or **/etc/nginx/conf.d/default.conf** for NGINX
-using docker compose specification adding a bind mount, example:
+using docker compose specification adding a bind mount. Such an override replaces the required policy: include an equivalent policy and rerun the security tests before exposure. Example:
 
 ```yaml
 volumes:
