@@ -46,6 +46,14 @@
          * Note: The files required in this directory are DATA.INI and your GRFs files.
          *       All others files will not be read.
          */
+        // Optional external loose-file roots. Empty means no external override.
+        'DATA_OVERRIDE_PATH' => getenv('DATA_OVERRIDE_PATH') ?: '',
+        'SYSTEM_PATH' => getenv('SYSTEM_PATH') ?: '',
+        'SYSTEMEN_PATH' => getenv('SYSTEMEN_PATH') ?: '',
+        'SYSTEM_ALIAS_SYSTEMEN' => robrowser_env_bool('SYSTEM_ALIAS_SYSTEMEN', false),
+        'AI_PATH' => getenv('AI_PATH') ?: '',
+        'BGM_PATH' => getenv('BGM_PATH') ?: '',
+
         'CLIENT_RESPATH'               =>     getenv('CLIENT_RESPATH') ? getenv('CLIENT_RESPATH') : 'resources/',
 
 

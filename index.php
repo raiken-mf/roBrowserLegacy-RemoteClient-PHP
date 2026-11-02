@@ -151,25 +151,30 @@ if (isset($_POST['filter']) && is_string($_POST['filter'])) {
 /**
  * DIRECT ACCESS
  */
-if (empty($_SERVER['REDIRECT_STATUS']) || $_SERVER['REDIRECT_STATUS'] != 404 || empty($_SERVER['REQUEST_URI'])) {
+if ((empty($_SERVER['REDIRECT_STATUS']) || $_SERVER['REDIRECT_STATUS'] != 404) && empty($_SERVER['RESOURCE_REQUEST']) && empty($_SERVER['REDIRECT_RESOURCE_REQUEST'])) {
     Debug::write('Direct access, no file requested ! You have to request a file (from the url), for example: <a href="data/clientinfo.xml">data/clientinfo.xml</a>', 'error');
     Debug::output();
 }
 
 
-// Decode path
-$path      = str_replace('\\', '/', mb_convert_encoding(urldecode($_SERVER['REQUEST_URI']),'UTF-8'));
-$path      = preg_replace('/\?.*/', '', $path); // remove query
-$directory = basename(dirname(__FILE__));
-
-// Check Allowed directory
-if (!preg_match( '/\/('. $directory . '\/)?(data|BGM)\//i', $path)) {
-    Debug::write('Forbidden directory, you can just access files located in data and BGM folder.', 'error');
-    Debug::output();
+// Decode exactly once and accept only relative paths under known asset roots.
+$uriPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$uriPath = rawurldecode($uriPath === null || $uriPath === false ? '' : $uriPath);
+if (!preg_match('#^/(?:[^/]+/)*(data|SystemEN|System|AI|BGM)/(.+)$#i', $uriPath, $matches)) {
+    http_response_code(404);
+    exit;
+}
+$path = $matches[1] . '/' . $matches[2];
+$path = str_replace('\\', '/', $path);
+$parts = explode('/', $path);
+foreach ($parts as $part) {
+    if ($part === '' || $part === '.' || $part === '..' || strpos($part, "\0") !== false) {
+        http_response_code(404);
+        exit;
+    }
 }
 
 // Get file
-$path = preg_replace('/(.*('. $directory . '\/)?)(data|BGM\/.*)/i', '$3', $path );
 $path = str_replace('/', '\\', $path);
 $ext  = strtolower(pathinfo($path, PATHINFO_EXTENSION));
 $file = Client::getFile($path);
