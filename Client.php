@@ -397,6 +397,12 @@ final class Client
 	 */
 	static public function getFile($path)
 	{
+        // Reject unsafe input even for non-HTTP callers and before cache/GRF/store.
+        if (!is_string($path) || $path === '' || preg_match('/[\x00-\x1f\x7f]/', $path)) return false;
+        $segments = explode('/', str_replace('\\', '/', $path));
+        foreach ($segments as $segment) {
+            if ($segment === '' || $segment === '.' || $segment === '..' || preg_match('/%(?:2e|2f|5c|25)/i', $segment)) return false;
+        }
 		$local_path         = self::$path;
 		$local_path        .= str_replace('\\', '/', $path);
 		$local_pathEncoded  = mb_convert_encoding($local_path, 'UTF-8');
@@ -414,34 +420,42 @@ final class Client
 			}
 		}
 
-		// Read from local data folder (with case-insensitive resolution for case-sensitive filesystems)
-		$resolvedLocalPath = self::resolveLocalPath($local_pathEncoded);
-		if ($resolvedLocalPath === false && strtolower(pathinfo($local_pathEncoded, PATHINFO_EXTENSION)) === 'bmp') {
-			$resolvedLocalPath = self::resolveLocalPath(preg_replace('/\.bmp$/i', '.png', $local_pathEncoded));
-		}
-
-		if ($resolvedLocalPath !== false && is_readable($resolvedLocalPath)) {
-			Debug::write('File found at ' . $resolvedLocalPath, 'success');
-
-			$content = file_get_contents($resolvedLocalPath);
-
-			// Add to cache
-			if (self::$cache !== null && $content !== false) {
-				self::$cache->set($path, $content);
-			}
-
-			// Store file if auto-extract is enabled (skip if a .bmp request already resolved to a converted .png)
-			$resolvedExt = strtolower(pathinfo($resolvedLocalPath, PATHINFO_EXTENSION));
-			$requestedExt = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-			if (self::$AutoExtract && $resolvedExt === $requestedExt) {
-				$relativeResolvedPath = self::getRelativePath($resolvedLocalPath, $path);
-				return self::store($relativeResolvedPath, $content);
-			}
-
-			return $content;
-		} else {
-			Debug::write('File not found at ' . $local_path);
-		}
+        // External roots override bundled files. Canonical containment checks apply
+        // even to case-insensitive matches and symlinks.
+        $normalized = str_replace('\\', '/', $path);
+        $pieces = explode('/', $normalized, 2);
+        $roots = ['data' => 'DATA_OVERRIDE_PATH', 'system' => 'SYSTEM_PATH',
+            'systemen' => 'SYSTEMEN_PATH', 'ai' => 'AI_PATH', 'bgm' => 'BGM_PATH'];
+        $key = strtolower($pieces[0]);
+        if (count($pieces) !== 2 || !isset($roots[$key])) {
+            return false;
+        }
+        $canonical = ['data' => 'data', 'system' => 'System', 'systemen' => 'SystemEN', 'ai' => 'AI', 'bgm' => 'BGM'];
+        $candidates = [];
+        $addRoots = function ($name) use (&$candidates, $roots, $canonical, $pieces) {
+            $configured = $GLOBALS['CONFIGS'][$roots[$name]] ?? '';
+            if ($configured !== '') $candidates[] = [$configured, $pieces[1]];
+            $candidates[] = [getcwd() . '/' . $canonical[$name], $pieces[1]];
+        };
+        $addRoots($key);
+        if ($key === 'system' && !empty($GLOBALS['CONFIGS']['SYSTEM_ALIAS_SYSTEMEN'])) {
+            $addRoots('systemen');
+        }
+        foreach ($candidates as [$root, $relative]) {
+            $base = realpath($root);
+            if ($base === false || !is_dir($base)) continue;
+            $names = [$relative];
+            if (strtolower(pathinfo($relative, PATHINFO_EXTENSION)) === 'bmp') {
+                $names[] = preg_replace('/\.bmp$/i', '.png', $relative);
+            }
+            foreach ($names as $name) {
+                $resolved = self::resolveLocalPath($base . '/' . $name);
+                $real = $resolved === false ? false : realpath($resolved);
+                if ($real === false || strpos($real, rtrim($base, '/') . '/') !== 0 || !is_file($real) || !is_readable($real)) continue;
+                $content = file_get_contents($real);
+                if ($content !== false) return $content;
+            }
+        }
 
 		// Use file index for O(1) lookup
 		$normalizedPath = strtolower(str_replace('\\', '/', $path));
@@ -549,6 +563,13 @@ final class Client
 			}
 		}
 
+        // Official client archives commonly store AI under data/ai/.
+        if ($key === 'ai') {
+            foreach (self::$grfs as $grf) {
+                if (!$grf->loaded) $grf->load();
+                if ($grf->getFile('data\\' . $grf_path, $content)) return $content;
+            }
+        }
 		return false;
 	}
 

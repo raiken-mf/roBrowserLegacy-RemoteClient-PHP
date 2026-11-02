@@ -26,6 +26,9 @@ ErrorDocument 404 /remote/index.php
 Options +FollowSymlinks -MultiViews
 RewriteEngine On
 
+# Route all loose resources through the bounded resolver, including existing files.
+RewriteRule ^(data|SystemEN|System|AI|BGM)/ index.php [L,NC,E=RESOURCE_REQUEST:1]
+
 <IfModule mod_speling.c>
 	CheckSpelling On
 	CheckCaseOnly On
