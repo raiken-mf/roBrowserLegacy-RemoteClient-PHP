@@ -305,15 +305,11 @@ Copy the file [.env.example](.env.example) to the same directory as .env
 
 After copying the game files and modifiying your .env file, you can start the container services.
 
-#### I want to use NGINX server
+#### Nginx deployments
 
-You can start using the remote client with NGINX using the following command:
-
-```bash
-docker compose --profile nginx up --build
-```
-
-The webserver will be answering requests on the 80 port.
+The supplied Nginx example does not yet enforce the Apache security policy.
+Do not expose it until an equivalent deny-by-default resource router and
+original-request traversal protection have been configured and tested.
 
 #### I want to use Apache server
 
@@ -329,15 +325,16 @@ Whether running via Docker, a standalone Linux server, or a Windows web server (
 
 | Module | Status | Purpose | How to Enable |
 |--------|--------|---------|---------------|
-| **`mod_rewrite`** | **Required** | Handles URL rewriting: rewrites `.bmp` requests to `.png` and routes missing assets to `index.php` | `a2enmod rewrite` / `LoadModule rewrite_module modules/mod_rewrite.so` |
+| **`mod_rewrite`** | **Required** | Routes resource requests to the bounded PHP resolver and rejects traversal | `a2enmod rewrite` / `LoadModule rewrite_module modules/mod_rewrite.so` |
 | **`mod_headers`** | **Required** | Sets CORS headers (`Access-Control-Allow-Origin`, `Access-Control-Allow-Headers`) allowing web clients to fetch resources | `a2enmod headers` / `LoadModule headers_module modules/mod_headers.so` |
 | **`mod_mime`** | **Recommended** | Defines custom Ragnarok asset MIME types (`.act`, `.spr`, `.pal`, `.gat`, `.gnd`, `.rsw`, `.rsm`) | Usually enabled by default (`mod_mime.so`) |
 | **`mod_deflate`** (or `mod_gzip`) | **Recommended** | Compresses game assets and text/XML/Lua responses at server level to save bandwidth | `a2enmod deflate` / `LoadModule deflate_module modules/mod_deflate.so` |
 | **`mod_speling`** | Optional | Provides case-insensitive URL correction (`CheckSpelling On`, `CheckCaseOnly On`, `CheckBasenameMatch Off`) | `a2enmod speling` / `LoadModule speling_module modules/mod_speling.so` |
 
-> **Important Apache Directives:**
-> - **`AllowOverride All`** (or `AllowOverride FileInfo Options Limit`) must be enabled in your `<Directory>` configuration so that [.htaccess](.htaccess) takes effect.
-> - **`ErrorDocument 404 /remote/index.php`** (or `/index.php` depending on your subpath) routes missing files to the PHP GRF extractor.
+> **Required Apache policy:** Include [`apache/remote-security.conf`](apache/remote-security.conf)
+> inside the serving virtual host after defining its URL prefix and filesystem
+> directory, as described in [Required Apache security configuration](#required-apache-security-configuration).
+> It sets `AllowOverride None`; `.htaccess` alone cannot enforce this policy.
 
 #### Nginx Modules
 
