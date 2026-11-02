@@ -54,7 +54,8 @@ with tempfile.TemporaryDirectory(prefix='remote-standalone-test-') as temp:
                                ('data/' + urllib.parse.quote_from_bytes(cpname), b'cp949\n')]:
             status, content, cors = request(path)
             assert (status, content, cors) == (200, expected, '*'), (path, status, content[:80], cors)
-        for path in ('configs.php', 'Client.php', 'resources/DATA.INI', 'data/escape.txt',
+        for path in ('configs.php', 'Client.php', 'resources/DATA.INI',
+                     'resources/add-grf-files-and-data-ini-here.txt', 'data/escape.txt',
                      'data/missing.lua', 'data/../configs.php', 'data/%2e%2e/configs.php',
                      'data/%252e%252e/configs.php', 'data/%2e%2e', 'data/..'):
             status, _, _ = request(path)
