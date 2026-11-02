@@ -23,7 +23,7 @@ Because pushing directly the fullclient on a server/ftp can provoke some errors,
 
 ### Prerequisites
 
-- **Web Server**: Apache (`mod_rewrite`, `mod_headers`, `mod_authz_core`) with the mandatory policy below. Other servers require an independently configured equivalent policy.
+- **Web Server**: Apache (`mod_rewrite`, `mod_headers`) or Nginx (`ngx_http_core`, `ngx_http_fastcgi`, `ngx_http_headers`)
 - **PHP**: 7.4+ (64-bit x64 recommended; **mandatory for GRFs > 2GB**)
 - **PHP Extensions**: `zlib`, `mbstring` (required); `gd` (with TrueColor), `iconv` (recommended)
 
@@ -43,7 +43,7 @@ php doctor.php --deep       # Deep validation with encoding analysis
 
 ### 3. Start the server
 
-Use the supplied secured Apache Docker profile or configure the mandatory Apache policy below. Other web servers require an equivalent policy.
+Using Docker or your preferred web server (Apache, Nginx).
 
 ---
 ## Wiki
@@ -305,11 +305,15 @@ Copy the file [.env.example](.env.example) to the same directory as .env
 
 After copying the game files and modifiying your .env file, you can start the container services.
 
-#### Nginx deployments
+#### I want to use NGINX server
 
-The supplied Nginx example does not yet enforce the Apache security policy.
-Do not expose it until an equivalent deny-by-default resource router and
-original-request traversal protection have been configured and tested.
+You can start using the remote client with NGINX using the following command:
+
+```bash
+docker compose --profile nginx up --build
+```
+
+The webserver will be answering requests on the 80 port.
 
 #### I want to use Apache server
 
@@ -325,16 +329,15 @@ Whether running via Docker, a standalone Linux server, or a Windows web server (
 
 | Module | Status | Purpose | How to Enable |
 |--------|--------|---------|---------------|
-| **`mod_rewrite`** | **Required** | Routes resource requests to the bounded PHP resolver and rejects traversal | `a2enmod rewrite` / `LoadModule rewrite_module modules/mod_rewrite.so` |
+| **`mod_rewrite`** | **Required** | Handles URL rewriting: rewrites `.bmp` requests to `.png` and routes missing assets to `index.php` | `a2enmod rewrite` / `LoadModule rewrite_module modules/mod_rewrite.so` |
 | **`mod_headers`** | **Required** | Sets CORS headers (`Access-Control-Allow-Origin`, `Access-Control-Allow-Headers`) allowing web clients to fetch resources | `a2enmod headers` / `LoadModule headers_module modules/mod_headers.so` |
 | **`mod_mime`** | **Recommended** | Defines custom Ragnarok asset MIME types (`.act`, `.spr`, `.pal`, `.gat`, `.gnd`, `.rsw`, `.rsm`) | Usually enabled by default (`mod_mime.so`) |
 | **`mod_deflate`** (or `mod_gzip`) | **Recommended** | Compresses game assets and text/XML/Lua responses at server level to save bandwidth | `a2enmod deflate` / `LoadModule deflate_module modules/mod_deflate.so` |
 | **`mod_speling`** | Optional | Provides case-insensitive URL correction (`CheckSpelling On`, `CheckCaseOnly On`, `CheckBasenameMatch Off`) | `a2enmod speling` / `LoadModule speling_module modules/mod_speling.so` |
 
-> **Required Apache policy:** Include [`apache/remote-security.conf`](apache/remote-security.conf)
-> inside the serving virtual host after defining its URL prefix and filesystem
-> directory, as described in [Required Apache security configuration](#required-apache-security-configuration).
-> It sets `AllowOverride None`; `.htaccess` alone cannot enforce this policy.
+> **Important Apache Directives:**
+> - **`AllowOverride All`** (or `AllowOverride FileInfo Options Limit`) must be enabled in your `<Directory>` configuration so that [.htaccess](.htaccess) takes effect.
+> - **`ErrorDocument 404 /remote/index.php`** (or `/index.php` depending on your subpath) routes missing files to the PHP GRF extractor.
 
 #### Nginx Modules
 
@@ -406,7 +409,7 @@ you have to modify the respective [Apache Dockerfile](docker/apache/Dockerfile) 
 and re-run the docker compose command.
 
 You can also override vhost configuration on **/etc/apache2/sites-available/000-default.conf** for Apache or **/etc/nginx/conf.d/default.conf** for NGINX
-using docker compose specification adding a bind mount. Such an override replaces the required policy: include an equivalent policy and rerun the security tests before exposure. Example:
+using docker compose specification adding a bind mount, example:
 
 ```yaml
 volumes:
@@ -440,51 +443,3 @@ Elapsed time: 1.86 seconds
 ### How this remote client works?
 
 ![](docs/how-it-works-high.png)
-
-## Required Apache security configuration
-
-The PHP resolver must run behind the server-level policy in
-[`apache/remote-security.conf`](apache/remote-security.conf). Apache normalizes
-URLs before it finds a per-directory `.htaccess`; a rewrite or deny rule in
-`.htaccess` alone cannot secure every normalized request. The policy routes
-`data/`, `System/`, `SystemEN/`, `AI/`, and `BGM/` to `index.php` before static
-file delivery, denies direct access to the application directory, blocks
-traversal in the original request, and uses `AllowOverride None`. The resolver
-independently checks path segments and canonical file containment. External
-roots are configured by `DATA_OVERRIDE_PATH`, `SYSTEM_PATH`, `SYSTEMEN_PATH`,
-`AI_PATH`, and `BGM_PATH`; `SYSTEM_ALIAS_SYSTEMEN=true` enables the optional
-System fallback after exact System files and GRF entries. Do not expose GRFs,
-`DATA.INI`, source code, configuration, cache, or log directories directly.
-
-The supplied Apache Dockerfiles install this policy for a site-root deployment.
-For another Apache installation, enable `mod_rewrite` and `mod_authz_core` and
-include the policy inside the serving virtual host, for example:
-
-```apache
-<VirtualHost *:80>
-    # Configure DocumentRoot or Alias so /remote/ maps to /srv/remote-client.
-    # The URL prefix must include its trailing slash.
-    Define RC_BASE /remote/
-    Define RC_DIR /srv/remote-client
-    Include /srv/remote-client/apache/remote-security.conf
-</VirtualHost>
-```
-
-Use `Define RC_BASE /` for a site-root deployment. `RC_DIR` must be the actual
-absolute directory and the URL must map to it; adjust the virtual host and
-verify that no later directory/location/alias rule overrides the deny policy.
-Before exposing the server, run `apachectl configtest` and test both successful
-resource requests and denial of direct `/remote/configs.php`,
-`/remote/resources/DATA.INI`, symlinks escaping allowed roots, and encoded,
-double-encoded and normalized traversal paths. The configured Apache rewrite
-and directory authorization must remain enabled; applying only `.htaccess` is
-not an equivalent installation.
-
-The shipped `.htaccess` denies requests when Apache permits it to be applied but
-the server policy was omitted. **If `AllowOverride None` is set without the
-server policy, `.htaccess` is ignored and provides no protection.** An existing
-server in that state is unsafe to expose; there is no PHP-only way to intercept
-files Apache serves directly. Nginx and other servers do not read `.htaccess`:
-their existing example configuration is not covered by this Apache policy and
-must not be exposed until an equivalent deny-by-default, front-controller and
-original-request traversal policy has been installed and tested.
