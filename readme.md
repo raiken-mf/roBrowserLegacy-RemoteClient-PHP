@@ -443,3 +443,51 @@ Elapsed time: 1.86 seconds
 ### How this remote client works?
 
 ![](docs/how-it-works-high.png)
+
+## Required Apache security configuration
+
+The PHP resolver must run behind the server-level policy in
+[`apache/remote-security.conf`](apache/remote-security.conf). Apache normalizes
+URLs before it finds a per-directory `.htaccess`; a rewrite or deny rule in
+`.htaccess` alone cannot secure every normalized request. The policy routes
+`data/`, `System/`, `SystemEN/`, `AI/`, and `BGM/` to `index.php` before static
+file delivery, denies direct access to the application directory, blocks
+traversal in the original request, and uses `AllowOverride None`. The resolver
+independently checks path segments and canonical file containment. External
+roots are configured by `DATA_OVERRIDE_PATH`, `SYSTEM_PATH`, `SYSTEMEN_PATH`,
+`AI_PATH`, and `BGM_PATH`; `SYSTEM_ALIAS_SYSTEMEN=true` enables the optional
+System fallback after exact System files and GRF entries. Do not expose GRFs,
+`DATA.INI`, source code, configuration, cache, or log directories directly.
+
+The supplied Apache Dockerfiles install this policy for a site-root deployment.
+For another Apache installation, enable `mod_rewrite` and `mod_authz_core` and
+include the policy inside the serving virtual host, for example:
+
+```apache
+<VirtualHost *:80>
+    # Configure DocumentRoot or Alias so /remote/ maps to /srv/remote-client.
+    # The URL prefix must include its trailing slash.
+    Define RC_BASE /remote/
+    Define RC_DIR /srv/remote-client
+    Include /srv/remote-client/apache/remote-security.conf
+</VirtualHost>
+```
+
+Use `Define RC_BASE /` for a site-root deployment. `RC_DIR` must be the actual
+absolute directory and the URL must map to it; adjust the virtual host and
+verify that no later directory/location/alias rule overrides the deny policy.
+Before exposing the server, run `apachectl configtest` and test both successful
+resource requests and denial of direct `/remote/configs.php`,
+`/remote/resources/DATA.INI`, symlinks escaping allowed roots, and encoded,
+double-encoded and normalized traversal paths. The configured Apache rewrite
+and directory authorization must remain enabled; applying only `.htaccess` is
+not an equivalent installation.
+
+The shipped `.htaccess` denies requests when Apache permits it to be applied but
+the server policy was omitted. **If `AllowOverride None` is set without the
+server policy, `.htaccess` is ignored and provides no protection.** An existing
+server in that state is unsafe to expose; there is no PHP-only way to intercept
+files Apache serves directly. Nginx and other servers do not read `.htaccess`:
+their existing example configuration is not covered by this Apache policy and
+must not be exposed until an equivalent deny-by-default, front-controller and
+original-request traversal policy has been installed and tested.

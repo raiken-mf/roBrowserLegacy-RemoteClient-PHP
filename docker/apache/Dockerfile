@@ -1,4 +1,4 @@
-FROM php:8.3-apache
+FROM php:8.3-apache AS server
 
 LABEL org.opencontainers.image.description="Creates a environment to serve PHP files for the Remote Client API."
 
@@ -11,74 +11,17 @@ RUN apt-get update -y -qq && \
   a2enmod headers
 
 # gd and its image library dependencies
-RUN apt-get install -y -qq libpng-dev libjpeg62-turbo-dev libfreetype6-dev && \
+RUN apt-get install -y -qq libpng-dev libjpeg62-turbo-dev libfreetype6-dev libonig-dev && \
   docker-php-ext-configure gd --with-jpeg --with-freetype && \
-  docker-php-ext-install -j"$(nproc)" gd && \
+  docker-php-ext-install -j"$(nproc)" gd mbstring && \
   rm -rf /var/lib/apt/lists/*
 
-RUN rm -f /etc/apache2/sites-available/000-default.conf
-
-RUN <<'EOF' cat >> /etc/apache2/sites-available/000-default.conf
-<VirtualHost *:80>
-    DocumentRoot /var/www/html
-    ErrorDocument 404 /index.php
-
-    ErrorLog ${APACHE_LOG_DIR}/error.log
-    CustomLog ${APACHE_LOG_DIR}/access.log combined
-
-    <IfModule mod_headers.c>
-        Header set Access-Control-Allow-Origin "*"
-        Header set Access-Control-Allow-Headers "X-Application"
-    </IfModule>
-    <Directory /var/www/html>
-        Options +FollowSymLinks -MultiViews
-        AllowOverride None
-        Require all granted
-
-        <IfModule mod_rewrite.c>
-            RewriteEngine On
-            RewriteCond %{REQUEST_FILENAME} !-f
-            RewriteRule ^(.*)\.bmp$ $1\.png [NC,QSA]
-        </IfModule>
-
-        <IfModule mod_speling.c>
-            CheckSpelling On
-            CheckCaseOnly On
-            CheckBasenameMatch Off
-        </IfModule>
-    </Directory>
-
-    <IfModule mod_gzip.c>
-        mod_gzip_on Yes
-        mod_gzip_dechunk Yes
-        mod_gzip_item_include file \.(act|spr|pal|txt|xml|lua|lub|gnd|gat|rsw|rsm)$
-    </IfModule>
-
-    <IfModule mod_mime.c>
-        AddType application/ro-action          .act
-        AddType application/ro-sprite          .spr
-        AddType application/ro-palette         .pal
-        AddType application/ro-ground          .gnd
-        AddType application/ro-altitude        .gat
-        AddType application/ro-world           .rsw
-        AddType application/ro-model           .rsm
-    </IfModule>
-
-    <IfModule mod_deflate.c>
-        AddOutputFilterByType DEFLATE \
-            application/ro-action \
-            application/ro-sprite \
-            application/ro-palette \
-            application/ro-ground \
-            application/ro-altitude \
-            application/ro-world \
-            application/ro-model \
-            text/plain \
-            application/xml
-    </IfModule>
-
-</VirtualHost>
-EOF
+# The security policy must be enabled at server scope: .htaccess runs too late
+# for paths normalized outside this directory. The source tree is mounted at
+# /var/www/html by Compose; never run it without the included policy.
+COPY apache/remote-security.conf /etc/apache2/remote-security.conf
+RUN printf 'Define RC_BASE /\nDefine RC_DIR "/var/www/html"\nInclude /etc/apache2/remote-security.conf\n' > /etc/apache2/conf-available/remote-security.conf \
+  && sed -i '/<\/VirtualHost>/i\    Include /etc/apache2/conf-available/remote-security.conf' /etc/apache2/sites-available/000-default.conf
 
 EXPOSE 80
 

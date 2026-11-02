@@ -650,6 +650,16 @@ final class Client
 				}
 			}
 
+			if ($matched === null && mb_check_encoding($segment, 'UTF-8')) {
+                // Some extracted client files use raw CP949 filesystem bytes.
+                // Only try a reversible conversion after UTF-8 matches have failed.
+                $encoded = mb_convert_encoding($segment, 'CP949', 'UTF-8');
+                if (mb_convert_encoding($encoded, 'UTF-8', 'CP949') === $segment &&
+                    $encoded !== '.' && $encoded !== '..' && strpos($encoded, '/') === false &&
+                    strpos($encoded, "\0") === false && file_exists(rtrim($current, '/') . '/' . $encoded)) {
+                    $matched = $encoded;
+                }
+            }
 			if ($matched === null) {
 				return false;
 			}
