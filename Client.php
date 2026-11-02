@@ -438,9 +438,7 @@ final class Client
             $candidates[] = [getcwd() . '/' . $canonical[$name], $pieces[1]];
         };
         $addRoots($key);
-        if ($key === 'system' && !empty($GLOBALS['CONFIGS']['SYSTEM_ALIAS_SYSTEMEN'])) {
-            $addRoots('systemen');
-        }
+        $readCandidates = function ($candidates) {
         foreach ($candidates as [$root, $relative]) {
             $base = realpath($root);
             if ($base === false || !is_dir($base)) continue;
@@ -456,6 +454,10 @@ final class Client
                 if ($content !== false) return $content;
             }
         }
+        return false;
+        };
+        $localContent = $readCandidates($candidates);
+        if ($localContent !== false) return $localContent;
 
 		// Use file index for O(1) lookup
 		$normalizedPath = strtolower(str_replace('\\', '/', $path));
@@ -563,6 +565,13 @@ final class Client
 			}
 		}
 
+        // Exact System GRF entries win before the optional translation alias.
+        if ($key === 'system' && !empty($GLOBALS['CONFIGS']['SYSTEM_ALIAS_SYSTEMEN'])) {
+            $candidates = [];
+            $addRoots('systemen');
+            $aliasContent = $readCandidates($candidates);
+            if ($aliasContent !== false) return $aliasContent;
+        }
         // Official client archives commonly store AI under data/ai/.
         if ($key === 'ai') {
             foreach (self::$grfs as $grf) {

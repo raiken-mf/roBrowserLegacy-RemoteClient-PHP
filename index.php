@@ -160,8 +160,7 @@ if ((empty($_SERVER['REDIRECT_STATUS']) || $_SERVER['REDIRECT_STATUS'] != 404) &
 // Decode exactly once and accept only relative paths under known asset roots.
 $uriPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $uriPath = rawurldecode($uriPath === null || $uriPath === false ? '' : $uriPath);
-$directory = preg_quote(basename(dirname(__FILE__)), '#');
-if (!preg_match('#^/(?:' . $directory . '/)?(data|SystemEN|System|AI|BGM)/(.+)$#i', $uriPath, $matches)) {
+if (!preg_match('#^/(?:[^/]+/)*(data|SystemEN|System|AI|BGM)/(.+)$#i', $uriPath, $matches)) {
     http_response_code(404);
     exit;
 }
